@@ -1,0 +1,14 @@
+type: topic
+trigger:
+  type: opa
+  policy: |
+    required_flags = [
+    	"user-flag-1",
+    	"user-flag-2",
+    	"user-flag-3",
+    ]
+
+    trigger if team_has_solved_flags(required_flags)
+title: 75% flags done
+body: |-
+  Congratulations! you have 75% of the flags done on [this track].
