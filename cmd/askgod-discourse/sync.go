@@ -10,25 +10,7 @@ import (
 
 	"github.com/nsec/askgod/api"
 	"gopkg.in/yaml.v2"
-
-	"context"
-
-	"github.com/open-policy-agent/opa/rego"
 )
-
-const opa_module_prelude = `
-package discourse
-
-import future.keywords.if
-import future.keywords.in
-
-default trigger := false
-
-team_has_solved_flags(flags) = {
-    count({i | input.team.id in input.askgod_flags[flags[i]]}) == count(flags)
-}
-
-`
 
 func (s *syncer) syncTeams() error {
 	s.teamsLock.Lock()
@@ -255,33 +237,23 @@ func (s *syncer) syncPosts() error {
 						teams = append(teams, team)
 					}
 				} else if post.Trigger.Type == "opa" {
-					ctx := context.TODO()
-					query, err := rego.New(
-						rego.Query("trigger = data.discourse.trigger"),
-						rego.Module("discourse.rego", opa_module_prelude + post.Trigger.Policy),
-					).PrepareForEval(ctx)
+					input := policyInput{
+						Post: &post,
+						AskgodFlags: askgodFlags,
+					}
+					policy, err := PreparePolicy(post.Trigger.Policy)
 
-					if err == nil {
+					if err != nil {
 						continue
 					}
 
 					for _, team := range dbTeams {
-						input := map[string]interface{}{
-							"team": map[string]interface{}{
-								"id": team.AskgodID,
-								"score": askgodScores[team.AskgodID],
-							},
-							"askgod_flags": askgodFlags,
-						}
+						input.TeamId = team.AskgodID
+						input.TeamScore = askgodScores[team.AskgodID]
 
-						ctx := context.TODO()
-						results, err := query.Eval(ctx, rego.EvalInput(input))
+						trigger, err := policy.Eval(input)
 
-						if err != nil {
-							continue
-						}
-
-						if results.Allowed() {
+						if err == nil && trigger {
 							teams = append(teams, team)
 						}
 					}
